@@ -2,23 +2,37 @@
 
 import { useRef, useEffect, useState } from "react";
 import type { RouteCoords } from "@/lib/routes";
+import { decodePolyline6 } from "@/lib/mapbox";
 
 interface RouteMapProps {
-  route: RouteCoords;
+  route?: RouteCoords;
+  origin?: { lat: number; lng: number };
+  destination?: { lat: number; lng: number };
+  routeGeometry?: string | null;
   driverPosition?: { lat: number; lng: number } | null;
   className?: string;
 }
 
-export default function RouteMap({ route, driverPosition, className = "" }: RouteMapProps) {
+export default function RouteMap({
+  route,
+  origin: originProp,
+  destination: destProp,
+  routeGeometry,
+  driverPosition,
+  className = "",
+}: RouteMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const driverMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [noToken, setNoToken] = useState(false);
 
+  const origin = originProp || route?.origin;
+  const destination = destProp || route?.destination;
+
   useEffect(() => {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-    if (!token || !mapContainer.current) {
-      setNoToken(true);
+    if (!token || !mapContainer.current || !origin || !destination) {
+      if (!token) setNoToken(true);
       return;
     }
 
@@ -29,8 +43,8 @@ export default function RouteMap({ route, driverPosition, className = "" }: Rout
 
       mapboxgl.accessToken = token!;
 
-      const centerLat = (route.origin.lat + route.destination.lat) / 2;
-      const centerLng = (route.origin.lng + route.destination.lng) / 2;
+      const centerLat = (origin!.lat + destination!.lat) / 2;
+      const centerLng = (origin!.lng + destination!.lng) / 2;
 
       map = new mapboxgl.Map({
         container: mapContainer.current!,
@@ -43,7 +57,21 @@ export default function RouteMap({ route, driverPosition, className = "" }: Rout
       mapRef.current = map;
 
       map.on("load", () => {
-        // Green route line
+        // Determine line coordinates and style
+        let lineCoords: [number, number][];
+        let dashArray: number[] | undefined;
+
+        if (routeGeometry) {
+          lineCoords = decodePolyline6(routeGeometry);
+          dashArray = undefined; // solid line for real route
+        } else {
+          lineCoords = [
+            [origin!.lng, origin!.lat],
+            [destination!.lng, destination!.lat],
+          ];
+          dashArray = [2, 1]; // dashed for straight line fallback
+        }
+
         map.addSource("route", {
           type: "geojson",
           data: {
@@ -51,24 +79,25 @@ export default function RouteMap({ route, driverPosition, className = "" }: Rout
             properties: {},
             geometry: {
               type: "LineString",
-              coordinates: [
-                [route.origin.lng, route.origin.lat],
-                [route.destination.lng, route.destination.lat],
-              ],
+              coordinates: lineCoords,
             },
           },
         });
+
+        const paint: Record<string, unknown> = {
+          "line-color": "#059669",
+          "line-width": 4,
+        };
+        if (dashArray) {
+          paint["line-dasharray"] = dashArray;
+        }
 
         map.addLayer({
           id: "route-line",
           type: "line",
           source: "route",
           layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": "#059669",
-            "line-width": 4,
-            "line-dasharray": [2, 1],
-          },
+          paint: paint as mapboxgl.LinePaint,
         });
 
         // Origin marker (filled green circle)
@@ -77,7 +106,7 @@ export default function RouteMap({ route, driverPosition, className = "" }: Rout
         originEl.style.cssText =
           "width:16px;height:16px;border-radius:50%;background:#059669;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
         new mapboxgl.Marker(originEl)
-          .setLngLat([route.origin.lng, route.origin.lat])
+          .setLngLat([origin!.lng, origin!.lat])
           .addTo(map);
 
         // Destination marker (outlined green circle)
@@ -86,13 +115,19 @@ export default function RouteMap({ route, driverPosition, className = "" }: Rout
         destEl.style.cssText =
           "width:16px;height:16px;border-radius:50%;background:white;border:3px solid #059669;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
         new mapboxgl.Marker(destEl)
-          .setLngLat([route.destination.lng, route.destination.lat])
+          .setLngLat([destination!.lng, destination!.lat])
           .addTo(map);
 
-        // Fit bounds
-        const bounds = new mapboxgl.LngLatBounds()
-          .extend([route.origin.lng, route.origin.lat])
-          .extend([route.destination.lng, route.destination.lat]);
+        // Fit bounds using polyline if available
+        const bounds = new mapboxgl.LngLatBounds();
+        if (routeGeometry && lineCoords.length > 0) {
+          for (const coord of lineCoords) {
+            bounds.extend(coord);
+          }
+        } else {
+          bounds.extend([origin!.lng, origin!.lat]);
+          bounds.extend([destination!.lng, destination!.lat]);
+        }
         map.fitBounds(bounds, { padding: 50 });
       });
     }
@@ -103,7 +138,7 @@ export default function RouteMap({ route, driverPosition, className = "" }: Rout
       map?.remove();
       mapRef.current = null;
     };
-  }, [route]);
+  }, [origin, destination, routeGeometry]);
 
   // Update driver marker
   useEffect(() => {

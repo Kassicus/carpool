@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { carpools, users, driverBlocks, bookings } from "@/db/schema";
 import { eq, and, notInArray, sql } from "drizzle-orm";
 import { ROUTES } from "@/types";
+import { fetchDirections } from "@/lib/mapbox";
 
 // Returns { "2026-03-10": [...carpools], "2026-03-11": [...], ... }
 export async function GET(request: Request) {
@@ -51,6 +52,15 @@ export async function GET(request: Request) {
       daysOfWeek: carpools.daysOfWeek,
       time: carpools.time,
       totalSeats: carpools.totalSeats,
+      originName: carpools.originName,
+      destinationName: carpools.destinationName,
+      originLat: carpools.originLat,
+      originLng: carpools.originLng,
+      destinationLat: carpools.destinationLat,
+      destinationLng: carpools.destinationLng,
+      routeGeometry: carpools.routeGeometry,
+      routeDistance: carpools.routeDistance,
+      routeDuration: carpools.routeDuration,
     })
     .from(carpools)
     .innerJoin(users, eq(carpools.driverId, users.id))
@@ -103,6 +113,15 @@ export async function GET(request: Request) {
       driverName: string;
       route: string;
       customRoute: string | null;
+      originName: string | null;
+      destinationName: string | null;
+      originLat: number | null;
+      originLng: number | null;
+      destinationLat: number | null;
+      destinationLng: number | null;
+      routeGeometry: string | null;
+      routeDistance: number | null;
+      routeDuration: number | null;
       time: string;
       totalSeats: number;
       availableSeats: number;
@@ -120,6 +139,15 @@ export async function GET(request: Request) {
           driverName: c.driverName,
           route: c.route,
           customRoute: c.customRoute,
+          originName: c.originName,
+          destinationName: c.destinationName,
+          originLat: c.originLat,
+          originLng: c.originLng,
+          destinationLat: c.destinationLat,
+          destinationLng: c.destinationLng,
+          routeGeometry: c.routeGeometry,
+          routeDistance: c.routeDistance,
+          routeDuration: c.routeDuration,
           time: c.time,
           totalSeats: c.totalSeats,
           availableSeats: c.totalSeats - booked,
@@ -142,7 +170,11 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { route, customRoute, daysOfWeek, time, totalSeats } = body;
+    const {
+      route, customRoute, daysOfWeek, time, totalSeats,
+      originLat, originLng, originName,
+      destinationLat, destinationLng, destinationName,
+    } = body;
 
     if (!route || !daysOfWeek?.length || !time || !totalSeats) {
       return NextResponse.json(
@@ -155,9 +187,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid route" }, { status: 400 });
     }
 
-    if (route === "Other" && !customRoute) {
+    if (route === "Other" && !customRoute && !originName) {
       return NextResponse.json(
         { error: "Custom route is required when selecting Other" },
+        { status: 400 }
+      );
+    }
+
+    if (route === "Custom" && (!originLat || !originLng || !destinationLat || !destinationLng)) {
+      return NextResponse.json(
+        { error: "Origin and destination locations are required for custom routes" },
         { status: 400 }
       );
     }
@@ -179,15 +218,41 @@ export async function POST(request: Request) {
       );
     }
 
+    // Fetch directions if we have coordinates
+    let routeGeometry: string | null = null;
+    let routeDistance: number | null = null;
+    let routeDuration: number | null = null;
+
+    if (originLat && originLng && destinationLat && destinationLng) {
+      const directions = await fetchDirections(
+        { lat: originLat, lng: originLng },
+        { lat: destinationLat, lng: destinationLng }
+      );
+      if (directions) {
+        routeGeometry = directions.geometry;
+        routeDistance = directions.distance;
+        routeDuration = directions.duration;
+      }
+    }
+
     const [carpool] = await db
       .insert(carpools)
       .values({
         driverId: session.user.id,
         route,
-        customRoute: route === "Other" ? customRoute : null,
+        customRoute: (route === "Other" || route === "Custom") ? customRoute : null,
         daysOfWeek,
         time,
         totalSeats,
+        originLat: originLat ?? null,
+        originLng: originLng ?? null,
+        originName: originName ?? null,
+        destinationLat: destinationLat ?? null,
+        destinationLng: destinationLng ?? null,
+        destinationName: destinationName ?? null,
+        routeGeometry,
+        routeDistance,
+        routeDuration,
       })
       .returning();
 

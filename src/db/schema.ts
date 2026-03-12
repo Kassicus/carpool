@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, date, time, integer, timestamp, uniqueIndex, boolean, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, date, time, integer, timestamp, uniqueIndex, boolean, doublePrecision, text } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const users = pgTable("users", {
@@ -19,6 +19,15 @@ export const carpools = pgTable("carpools", {
   daysOfWeek: integer("days_of_week").array().notNull(), // 0=Sun, 1=Mon, ..., 6=Sat
   time: time("time").notNull(),
   totalSeats: integer("total_seats").notNull(),
+  originLat: doublePrecision("origin_lat"),
+  originLng: doublePrecision("origin_lng"),
+  originName: varchar("origin_name", { length: 255 }),
+  destinationLat: doublePrecision("destination_lat"),
+  destinationLng: doublePrecision("destination_lng"),
+  destinationName: varchar("destination_name", { length: 255 }),
+  routeGeometry: text("route_geometry"),
+  routeDistance: integer("route_distance"),
+  routeDuration: integer("route_duration"),
   isActive: boolean("is_active").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

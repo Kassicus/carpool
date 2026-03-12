@@ -4,6 +4,7 @@ export const ROUTES = [
   "To School",
   "Home from School",
   "Other",
+  "Custom",
 ] as const;
 
 export type Route = (typeof ROUTES)[number];

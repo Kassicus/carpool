@@ -16,6 +16,15 @@ interface Ride {
   driverName: string;
   route: string;
   customRoute: string | null;
+  originName?: string | null;
+  destinationName?: string | null;
+  originLat?: number | null;
+  originLng?: number | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  routeGeometry?: string | null;
+  routeDistance?: number | null;
+  routeDuration?: number | null;
   date: string;
   time: string;
   bookedAt: string;
@@ -73,7 +82,7 @@ export default function MyRidesList({ refreshKey }: { refreshKey: number }) {
   return (
     <div className="space-y-3">
       {rides.map((ride) => {
-        const routeNames = getRouteDisplayNames(ride.route, ride.customRoute);
+        const routeNames = getRouteDisplayNames(ride);
         return (
           <Card key={ride.bookingId} className="p-4">
             <div className="flex items-start justify-between gap-3">

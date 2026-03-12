@@ -9,6 +9,8 @@ interface ActiveRide {
   carpoolId: string;
   route: string;
   customRoute: string | null;
+  originName?: string | null;
+  destinationName?: string | null;
   driverName: string;
   time: string;
 }
@@ -36,6 +38,8 @@ export default function ActiveRideBanner() {
                 carpoolId: ride.carpoolId,
                 route: ride.route,
                 customRoute: ride.customRoute,
+                originName: ride.originName,
+                destinationName: ride.destinationName,
                 driverName: ride.driverName,
                 time: ride.time,
               });
@@ -59,8 +63,9 @@ export default function ActiveRideBanner() {
 
   if (!activeRide) return null;
 
-  const routeName =
-    activeRide.route === "Other"
+  const routeName = activeRide.originName
+    ? `${activeRide.originName} → ${activeRide.destinationName || ""}`
+    : activeRide.route === "Other" || activeRide.route === "Custom"
       ? activeRide.customRoute
       : activeRide.route;
 

@@ -25,6 +25,15 @@ interface Carpool {
   id: string;
   route: string;
   customRoute: string | null;
+  originName?: string | null;
+  destinationName?: string | null;
+  originLat?: number | null;
+  originLng?: number | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  routeGeometry?: string | null;
+  routeDistance?: number | null;
+  routeDuration?: number | null;
   daysOfWeek: number[];
   time: string;
   totalSeats: number;
@@ -86,7 +95,7 @@ export default function MyCarpoolsList({
   return (
     <div className="space-y-4">
       {carpools.map((carpool) => {
-        const routeNames = getRouteDisplayNames(carpool.route, carpool.customRoute);
+        const routeNames = getRouteDisplayNames(carpool);
         return (
           <Card key={carpool.id} className="p-4">
             <div className="flex items-start justify-between">
@@ -95,6 +104,8 @@ export default function MyCarpoolsList({
                   <RouteTimeline
                     origin={routeNames.origin}
                     destination={routeNames.destination || undefined}
+                    distance={carpool.routeDistance}
+                    duration={carpool.routeDuration}
                   />
                 ) : (
                   <h3 className="font-semibold text-text">
@@ -125,7 +136,13 @@ export default function MyCarpoolsList({
             <div className="mt-3 border-t border-border-light pt-3">
               <DriverTracking
                 carpoolId={carpool.id}
-                routeName={carpool.route === "Other" ? (carpool.customRoute || "Custom") : carpool.route}
+                routeName={carpool.route === "Other" || carpool.route === "Custom" ? (carpool.customRoute || "Custom") : carpool.route}
+                destinationLat={carpool.destinationLat}
+                destinationLng={carpool.destinationLng}
+                destinationName={carpool.destinationName}
+                originLat={carpool.originLat}
+                originLng={carpool.originLng}
+                routeGeometry={carpool.routeGeometry}
               />
             </div>
 

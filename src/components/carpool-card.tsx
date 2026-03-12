@@ -14,6 +14,8 @@ interface Carpool {
   driverName: string;
   route: string;
   customRoute: string | null;
+  originName?: string | null;
+  destinationName?: string | null;
   date: string;
   time: string;
   totalSeats: number;
@@ -28,7 +30,7 @@ export default function CarpoolCard({
   onBook: (id: string, date: string) => void;
 }) {
   const [booking, setBooking] = useState(false);
-  const routeNames = getRouteDisplayNames(carpool.route, carpool.customRoute);
+  const routeNames = getRouteDisplayNames(carpool);
 
   async function handleBook() {
     setBooking(true);

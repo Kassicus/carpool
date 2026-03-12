@@ -9,11 +9,22 @@ import Card from "./ui/card";
 interface RiderLiveMapProps {
   carpoolId: string;
   route: string;
-  destinationLat?: number;
-  destinationLng?: number;
+  originLat?: number | null;
+  originLng?: number | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  routeGeometry?: string | null;
 }
 
-export default function RiderLiveMap({ carpoolId, route, destinationLat, destinationLng }: RiderLiveMapProps) {
+export default function RiderLiveMap({
+  carpoolId,
+  route,
+  originLat,
+  originLng,
+  destinationLat,
+  destinationLng,
+  routeGeometry,
+}: RiderLiveMapProps) {
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
   const [status, setStatus] = useState<string>("Connecting...");
   const [statusColor, setStatusColor] = useState("text-text-secondary");
@@ -22,8 +33,17 @@ export default function RiderLiveMap({ carpoolId, route, destinationLat, destina
   const fallbackRef = useRef<NodeJS.Timeout | null>(null);
 
   const routeCoords = ROUTE_COORDS[route];
-  const destLat = destinationLat ?? routeCoords?.destination.lat;
-  const destLng = destinationLng ?? routeCoords?.destination.lng;
+
+  // Resolve coordinates: prefer explicit props, fall back to preset
+  const origin = (originLat != null && originLng != null)
+    ? { lat: originLat, lng: originLng }
+    : routeCoords?.origin ?? null;
+  const destination = (destinationLat != null && destinationLng != null)
+    ? { lat: destinationLat, lng: destinationLng }
+    : routeCoords?.destination ?? null;
+
+  const destLat = destination?.lat;
+  const destLng = destination?.lng;
 
   const updateStatus = useCallback(
     (lat: number, lng: number) => {
@@ -76,7 +96,6 @@ export default function RiderLiveMap({ carpoolId, route, destinationLat, destina
             if (fallbackRef.current) clearInterval(fallbackRef.current);
             return;
           }
-          // For fallback, just re-establish SSE
         } catch {
           // ignore
         }
@@ -89,12 +108,14 @@ export default function RiderLiveMap({ carpoolId, route, destinationLat, destina
     };
   }, [carpoolId, updateStatus]);
 
-  if (!routeCoords) return null;
+  if (!origin || !destination) return null;
 
   return (
     <Card className="overflow-hidden">
       <RouteMap
-        route={routeCoords}
+        origin={origin}
+        destination={destination}
+        routeGeometry={routeGeometry}
         driverPosition={driverPos}
         className="h-48 sm:h-64"
       />

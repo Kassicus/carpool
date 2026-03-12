@@ -23,11 +23,27 @@ export const ROUTE_COORDS: Record<string, RouteCoords> = {
   },
 };
 
-export function getRouteDisplayNames(route: string, customRoute: string | null): { origin: string; destination: string } | null {
-  if (route === "Other" && customRoute) {
-    return { origin: customRoute, destination: "" };
+export function getRouteDisplayNames(carpool: {
+  route: string;
+  customRoute?: string | null;
+  originName?: string | null;
+  destinationName?: string | null;
+}): { origin: string; destination: string } | null {
+  // Prefer stored names
+  if (carpool.originName || carpool.destinationName) {
+    return {
+      origin: carpool.originName || "",
+      destination: carpool.destinationName || "",
+    };
   }
-  const coords = ROUTE_COORDS[route];
-  if (!coords) return null;
-  return { origin: coords.origin.name, destination: coords.destination.name };
+  // Fall back to preset coords
+  const coords = ROUTE_COORDS[carpool.route];
+  if (coords) {
+    return { origin: coords.origin.name, destination: coords.destination.name };
+  }
+  // Fall back to custom route text
+  if ((carpool.route === "Other" || carpool.route === "Custom") && carpool.customRoute) {
+    return { origin: carpool.customRoute, destination: "" };
+  }
+  return null;
 }

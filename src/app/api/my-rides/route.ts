@@ -20,6 +20,15 @@ export async function GET() {
       date: bookings.date,
       time: carpools.time,
       bookedAt: bookings.createdAt,
+      originName: carpools.originName,
+      destinationName: carpools.destinationName,
+      originLat: carpools.originLat,
+      originLng: carpools.originLng,
+      destinationLat: carpools.destinationLat,
+      destinationLng: carpools.destinationLng,
+      routeGeometry: carpools.routeGeometry,
+      routeDistance: carpools.routeDistance,
+      routeDuration: carpools.routeDuration,
     })
     .from(bookings)
     .innerJoin(carpools, eq(bookings.carpoolId, carpools.id))

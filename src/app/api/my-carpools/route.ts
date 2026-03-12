@@ -19,6 +19,15 @@ export async function GET() {
       time: carpools.time,
       totalSeats: carpools.totalSeats,
       createdAt: carpools.createdAt,
+      originName: carpools.originName,
+      destinationName: carpools.destinationName,
+      originLat: carpools.originLat,
+      originLng: carpools.originLng,
+      destinationLat: carpools.destinationLat,
+      destinationLng: carpools.destinationLng,
+      routeGeometry: carpools.routeGeometry,
+      routeDistance: carpools.routeDistance,
+      routeDuration: carpools.routeDuration,
     })
     .from(carpools)
     .where(eq(carpools.driverId, session.user.id))

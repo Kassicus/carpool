@@ -15,6 +15,15 @@ interface Carpool {
   driverName: string;
   route: string;
   customRoute: string | null;
+  originName?: string | null;
+  destinationName?: string | null;
+  originLat?: number | null;
+  originLng?: number | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  routeGeometry?: string | null;
+  routeDistance?: number | null;
+  routeDuration?: number | null;
   time: string;
   totalSeats: number;
   availableSeats: number;
@@ -153,7 +162,7 @@ export default function SearchCarpools({
                 ) : (
                   <div className="space-y-3 mb-2">
                     {rides.map((ride) => {
-                      const routeNames = getRouteDisplayNames(ride.route, ride.customRoute);
+                      const routeNames = getRouteDisplayNames(ride);
                       return (
                         <Card
                           key={ride.id}
@@ -175,6 +184,8 @@ export default function SearchCarpools({
                                   <RouteTimeline
                                     origin={routeNames.origin}
                                     destination={routeNames.destination || undefined}
+                                    distance={ride.routeDistance}
+                                    duration={ride.routeDuration}
                                     className="mt-2"
                                   />
                                 ) : (
