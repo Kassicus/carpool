@@ -29,3 +29,34 @@ export function getStatusColor(distanceMeters: number): string {
   if (distanceMeters < 2000) return "text-amber-500";
   return "text-text-secondary";
 }
+
+/** Fetch ETA from Mapbox Directions API */
+export async function fetchETA(
+  driverPos: { lat: number; lng: number },
+  destination: { lat: number; lng: number }
+): Promise<{ eta: number; distance: number } | null> {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!token) return null;
+
+  try {
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${driverPos.lng},${driverPos.lat};${destination.lng},${destination.lat}?overview=false&access_token=${token}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const route = data.routes?.[0];
+    if (!route) return null;
+    return { eta: Math.round(route.duration), distance: Math.round(route.distance) };
+  } catch {
+    return null;
+  }
+}
+
+/** ETA-based status message, falls back to distance-based */
+export function getETAMessage(etaSeconds: number | null, distanceMeters: number): string {
+  if (etaSeconds != null) {
+    if (etaSeconds < 60) return "Arriving now";
+    const mins = Math.round(etaSeconds / 60);
+    return `Arriving in ~${mins} min`;
+  }
+  return getStatusMessage(distanceMeters);
+}

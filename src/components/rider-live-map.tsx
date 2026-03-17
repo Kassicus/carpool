@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ROUTE_COORDS } from "@/lib/routes";
-import { distanceBetween, getStatusMessage, getStatusColor } from "@/lib/geo";
+import { distanceBetween, getStatusColor, fetchETA, getETAMessage } from "@/lib/geo";
+import { formatDistance } from "@/lib/map-style";
 import RouteMap from "./map/route-map";
 import Card from "./ui/card";
 
 interface RiderLiveMapProps {
   carpoolId: string;
-  route: string;
   originLat?: number | null;
   originLng?: number | null;
   destinationLat?: number | null;
@@ -18,7 +17,6 @@ interface RiderLiveMapProps {
 
 export default function RiderLiveMap({
   carpoolId,
-  route,
   originLat,
   originLng,
   destinationLat,
@@ -29,34 +27,49 @@ export default function RiderLiveMap({
   const [status, setStatus] = useState<string>("Connecting...");
   const [statusColor, setStatusColor] = useState("text-text-secondary");
   const [stopped, setStopped] = useState(false);
+  const [eta, setEta] = useState<number | null>(null);
+  const [distanceAway, setDistanceAway] = useState<number | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const fallbackRef = useRef<NodeJS.Timeout | null>(null);
+  const lastETAFetchRef = useRef<number>(0);
 
-  const routeCoords = ROUTE_COORDS[route];
-
-  // Resolve coordinates: prefer explicit props, fall back to preset
   const origin = (originLat != null && originLng != null)
     ? { lat: originLat, lng: originLng }
-    : routeCoords?.origin ?? null;
+    : null;
   const destination = (destinationLat != null && destinationLng != null)
     ? { lat: destinationLat, lng: destinationLng }
-    : routeCoords?.destination ?? null;
+    : null;
 
   const destLat = destination?.lat;
   const destLng = destination?.lng;
 
   const updateStatus = useCallback(
-    (lat: number, lng: number) => {
-      if (destLat != null && destLng != null) {
-        const dist = distanceBetween(lat, lng, destLat, destLng);
-        setStatus(getStatusMessage(dist));
-        setStatusColor(getStatusColor(dist));
-      } else {
+    async (lat: number, lng: number) => {
+      if (destLat == null || destLng == null) {
         setStatus("Driver is active");
         setStatusColor("text-primary");
+        return;
       }
+
+      const dist = distanceBetween(lat, lng, destLat, destLng);
+      setDistanceAway(dist);
+      setStatusColor(getStatusColor(dist));
+
+      const now = Date.now();
+      if (now - lastETAFetchRef.current >= 15000) {
+        lastETAFetchRef.current = now;
+        const result = await fetchETA({ lat, lng }, { lat: destLat, lng: destLng });
+        if (result) {
+          setEta(result.eta);
+          setDistanceAway(result.distance);
+          setStatus(getETAMessage(result.eta, result.distance));
+          return;
+        }
+      }
+
+      setStatus(getETAMessage(eta, dist));
     },
-    [destLat, destLng]
+    [destLat, destLng, eta]
   );
 
   useEffect(() => {
@@ -129,6 +142,9 @@ export default function RiderLiveMap({
           )}
           <span className={`text-sm font-semibold ${statusColor}`}>{status}</span>
         </div>
+        {distanceAway != null && !stopped && (
+          <p className="text-xs text-text-muted mt-1">{formatDistance(distanceAway)} away</p>
+        )}
       </div>
     </Card>
   );

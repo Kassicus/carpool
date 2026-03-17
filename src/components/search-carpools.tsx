@@ -14,7 +14,6 @@ interface Carpool {
   id: string;
   driverName: string;
   route: string;
-  customRoute: string | null;
   originName?: string | null;
   destinationName?: string | null;
   originLat?: number | null;
@@ -180,18 +179,15 @@ export default function SearchCarpools({
                                     {formatTime(ride.time)}
                                   </Badge>
                                 </div>
-                                {routeNames ? (
+                                <p className="text-xs text-text-muted">{ride.route}</p>
+                                {routeNames && (
                                   <RouteTimeline
                                     origin={routeNames.origin}
                                     destination={routeNames.destination || undefined}
                                     distance={ride.routeDistance}
                                     duration={ride.routeDuration}
-                                    className="mt-2"
+                                    className="mt-1"
                                   />
-                                ) : (
-                                  <p className="text-sm text-text-secondary">
-                                    {ride.route === "Other" ? ride.customRoute : ride.route}
-                                  </p>
                                 )}
                                 <p className="mt-2 text-xs text-text-muted">
                                   {ride.availableSeats} seat{ride.availableSeats !== 1 ? "s" : ""} left

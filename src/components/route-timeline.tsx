@@ -9,7 +9,7 @@ interface RouteTimelineProps {
 export default function RouteTimeline({ origin, destination, distance, duration, className = "" }: RouteTimelineProps) {
   const hasMeta = distance != null && duration != null && distance > 0;
   const metaText = hasMeta
-    ? `${Math.round(duration! / 60)} min · ${(distance! / 1000).toFixed(1)} km`
+    ? `${Math.round(duration! / 60)} min · ${(distance! / 1609.344).toFixed(1)} mi`
     : null;
 
   return (

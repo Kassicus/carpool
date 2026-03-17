@@ -149,8 +149,12 @@ export default function DriverTracking({
   const hasDestination = destinationLat != null && destinationLng != null;
   const hasOrigin = originLat != null && originLng != null;
 
-  function handleNavigate() {
+  async function handleNavigate() {
     if (!hasDestination) return;
+    // Auto-start tracking so riders can see the driver's location
+    if (!active) {
+      await startTracking();
+    }
     const url = `https://www.google.com/maps/dir/?api=1&destination=${destinationLat},${destinationLng}`;
     window.open(url, "_blank");
   }

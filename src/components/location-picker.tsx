@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Input from "./ui/input";
+import { MAP_STYLE, MAP_DEFAULT_OPTIONS, applyThemeStyle } from "@/lib/map-style";
 
 interface LocationValue {
   lat: number;
@@ -24,6 +25,26 @@ interface GeoResult {
   text: string;
 }
 
+// Shared user location — resolved once, reused across all LocationPicker instances
+let userLocationPromise: Promise<[number, number]> | null = null;
+
+function getUserLocation(): Promise<[number, number]> {
+  if (!userLocationPromise) {
+    userLocationPromise = new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve([0, 0]);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve([pos.coords.longitude, pos.coords.latitude]),
+        () => resolve([0, 0]),
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+      );
+    });
+  }
+  return userLocationPromise;
+}
+
 export default function LocationPicker({
   label,
   value,
@@ -35,11 +56,17 @@ export default function LocationPicker({
   const [results, setResults] = useState<GeoResult[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showMap, setShowMap] = useState(false);
+  const [userLoc, setUserLoc] = useState<[number, number] | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markerRef = useRef<mapboxgl.Marker | null>(null);
+
+  // Resolve user location once on mount
+  useEffect(() => {
+    getUserLocation().then(setUserLoc);
+  }, []);
 
   // Sync query text when value changes externally
   useEffect(() => {
@@ -64,9 +91,14 @@ export default function LocationPicker({
       return;
     }
 
+    const loc = await getUserLocation();
+    const proximityParam = loc[0] !== 0 || loc[1] !== 0
+      ? `&proximity=${loc[0]},${loc[1]}`
+      : "&proximity=ip";
+
     try {
       const res = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?proximity=22.9584,40.5872&limit=5&access_token=${token}`
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?limit=5${proximityParam}&access_token=${token}`
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -104,29 +136,36 @@ export default function LocationPicker({
 
   // Init map for "pick on map"
   useEffect(() => {
-    if (!showMap || !mapContainerRef.current) return;
+    if (!showMap || !mapContainerRef.current || !userLoc) return;
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
     if (!token) return;
 
-    let map: mapboxgl.Map;
+    let canceled = false;
+    let map: mapboxgl.Map | undefined;
 
     async function initMap() {
       const mapboxgl = (await import("mapbox-gl")).default;
+
+      if (canceled || !mapContainerRef.current) return;
+
       mapboxgl.accessToken = token!;
 
       const center: [number, number] = value
         ? [value.lng, value.lat]
-        : [22.9584, 40.5872];
+        : userLoc!;
 
       map = new mapboxgl.Map({
-        container: mapContainerRef.current!,
-        style: "mapbox://styles/mapbox/light-v11",
+        container: mapContainerRef.current,
+        style: MAP_STYLE,
         center,
-        zoom: value ? 15 : 13,
-        attributionControl: false,
+        zoom: value ? 15 : 10,
+        ...MAP_DEFAULT_OPTIONS,
       });
 
       mapRef.current = map;
+
+      map.on("style.load", () => applyThemeStyle(map!));
+      map.once("load", () => map!.resize());
 
       const marker = new mapboxgl.Marker({ draggable: true })
         .setLngLat(center)
@@ -161,12 +200,13 @@ export default function LocationPicker({
 
     initMap();
     return () => {
+      canceled = true;
       map?.remove();
       mapRef.current = null;
       markerRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showMap]);
+  }, [showMap, userLoc]);
 
   return (
     <div ref={containerRef} className="relative">

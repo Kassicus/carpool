@@ -70,6 +70,24 @@ export const bookings = pgTable(
   ]
 );
 
+export const savedRoutes = pgTable("saved_routes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  driverId: uuid("driver_id")
+    .notNull()
+    .references(() => users.id),
+  name: varchar("name", { length: 100 }).notNull(),
+  originLat: doublePrecision("origin_lat").notNull(),
+  originLng: doublePrecision("origin_lng").notNull(),
+  originName: varchar("origin_name", { length: 255 }).notNull(),
+  destinationLat: doublePrecision("destination_lat").notNull(),
+  destinationLng: doublePrecision("destination_lng").notNull(),
+  destinationName: varchar("destination_name", { length: 255 }).notNull(),
+  routeGeometry: text("route_geometry"),
+  routeDistance: integer("route_distance"),
+  routeDuration: integer("route_duration"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const driverBlocks = pgTable(
   "driver_blocks",
   {
@@ -88,9 +106,17 @@ export const driverBlocks = pgTable(
 );
 
 // Relations
+export const savedRoutesRelations = relations(savedRoutes, ({ one }) => ({
+  driver: one(users, {
+    fields: [savedRoutes.driverId],
+    references: [users.id],
+  }),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   carpools: many(carpools),
   bookings: many(bookings),
+  savedRoutes: many(savedRoutes),
   blocksAsDriver: many(driverBlocks, { relationName: "driverBlocks" }),
   blocksAsBlocked: many(driverBlocks, { relationName: "blockedByDrivers" }),
 }));

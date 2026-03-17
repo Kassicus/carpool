@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from "react";
 import type { RouteCoords } from "@/lib/routes";
 import { decodePolyline6 } from "@/lib/mapbox";
+import { MAP_STYLE, MAP_COLORS, MAP_DEFAULT_OPTIONS, applyThemeStyle } from "@/lib/map-style";
 
 interface RouteMapProps {
   route?: RouteCoords;
@@ -36,10 +37,13 @@ export default function RouteMap({
       return;
     }
 
-    let map: mapboxgl.Map;
+    let canceled = false;
+    let map: mapboxgl.Map | undefined;
 
     async function initMap() {
       const mapboxgl = (await import("mapbox-gl")).default;
+
+      if (canceled || !mapContainer.current) return;
 
       mapboxgl.accessToken = token!;
 
@@ -47,16 +51,20 @@ export default function RouteMap({
       const centerLng = (origin!.lng + destination!.lng) / 2;
 
       map = new mapboxgl.Map({
-        container: mapContainer.current!,
-        style: "mapbox://styles/mapbox/light-v11",
+        container: mapContainer.current,
+        style: MAP_STYLE,
         center: [centerLng, centerLat],
         zoom: 13,
-        attributionControl: false,
+        ...MAP_DEFAULT_OPTIONS,
       });
 
-      mapRef.current = map;
+      const m = map;
+      mapRef.current = m;
 
-      map.on("load", () => {
+      m.on("style.load", () => applyThemeStyle(m));
+
+      m.on("load", () => {
+        m.resize();
         // Determine line coordinates and style
         let lineCoords: [number, number][];
         let dashArray: number[] | undefined;
@@ -72,7 +80,7 @@ export default function RouteMap({
           dashArray = [2, 1]; // dashed for straight line fallback
         }
 
-        map.addSource("route", {
+        m.addSource("route", {
           type: "geojson",
           data: {
             type: "Feature",
@@ -85,14 +93,14 @@ export default function RouteMap({
         });
 
         const paint: Record<string, unknown> = {
-          "line-color": "#059669",
+          "line-color": MAP_COLORS.route,
           "line-width": 4,
         };
         if (dashArray) {
           paint["line-dasharray"] = dashArray;
         }
 
-        map.addLayer({
+        m.addLayer({
           id: "route-line",
           type: "line",
           source: "route",
@@ -104,19 +112,19 @@ export default function RouteMap({
         const originEl = document.createElement("div");
         originEl.className = "route-marker-origin";
         originEl.style.cssText =
-          "width:16px;height:16px;border-radius:50%;background:#059669;border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
+          `width:16px;height:16px;border-radius:50%;background:${MAP_COLORS.markerOrigin};border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.2);`;
         new mapboxgl.Marker(originEl)
           .setLngLat([origin!.lng, origin!.lat])
-          .addTo(map);
+          .addTo(m);
 
         // Destination marker (outlined green circle)
         const destEl = document.createElement("div");
         destEl.className = "route-marker-dest";
         destEl.style.cssText =
-          "width:16px;height:16px;border-radius:50%;background:white;border:3px solid #059669;box-shadow:0 2px 4px rgba(0,0,0,0.2);";
+          `width:16px;height:16px;border-radius:50%;background:white;border:3px solid ${MAP_COLORS.markerDestination};box-shadow:0 2px 4px rgba(0,0,0,0.2);`;
         new mapboxgl.Marker(destEl)
           .setLngLat([destination!.lng, destination!.lat])
-          .addTo(map);
+          .addTo(m);
 
         // Fit bounds using polyline if available
         const bounds = new mapboxgl.LngLatBounds();
@@ -128,13 +136,14 @@ export default function RouteMap({
           bounds.extend([origin!.lng, origin!.lat]);
           bounds.extend([destination!.lng, destination!.lat]);
         }
-        map.fitBounds(bounds, { padding: 50 });
+        m.fitBounds(bounds, { padding: 50 });
       });
     }
 
     initMap();
 
     return () => {
+      canceled = true;
       map?.remove();
       mapRef.current = null;
     };
@@ -152,7 +161,7 @@ export default function RouteMap({
       } else {
         const el = document.createElement("div");
         el.style.cssText =
-          "width:20px;height:20px;border-radius:50%;background:#059669;border:3px solid white;box-shadow:0 0 0 4px rgba(5,150,105,0.3);";
+          `width:20px;height:20px;border-radius:50%;background:${MAP_COLORS.markerDriver};border:3px solid white;box-shadow:0 0 0 4px ${MAP_COLORS.markerDriverGlow};`;
         driverMarkerRef.current = new mapboxgl.Marker(el)
           .setLngLat([driverPosition!.lng, driverPosition!.lat])
           .addTo(mapRef.current!);

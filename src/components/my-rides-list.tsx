@@ -15,7 +15,6 @@ interface Ride {
   carpoolId: string;
   driverName: string;
   route: string;
-  customRoute: string | null;
   originName?: string | null;
   destinationName?: string | null;
   originLat?: number | null;
@@ -89,15 +88,15 @@ export default function MyRidesList({ refreshKey }: { refreshKey: number }) {
               <div className="flex items-start gap-3 min-w-0">
                 <Avatar name={ride.driverName} size="sm" />
                 <div className="min-w-0 flex-1">
-                  {routeNames ? (
+                  <h3 className="text-sm font-semibold text-text">{ride.route}</h3>
+                  {routeNames && (
                     <RouteTimeline
                       origin={routeNames.origin}
                       destination={routeNames.destination || undefined}
+                      distance={ride.routeDistance}
+                      duration={ride.routeDuration}
+                      className="mt-1"
                     />
-                  ) : (
-                    <h3 className="font-semibold text-text">
-                      {ride.route === "Other" ? ride.customRoute : ride.route}
-                    </h3>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Badge variant="secondary">{ride.driverName}</Badge>

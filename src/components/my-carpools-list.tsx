@@ -24,7 +24,6 @@ interface Rider {
 interface Carpool {
   id: string;
   route: string;
-  customRoute: string | null;
   originName?: string | null;
   destinationName?: string | null;
   originLat?: number | null;
@@ -100,17 +99,15 @@ export default function MyCarpoolsList({
           <Card key={carpool.id} className="p-4">
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1">
-                {routeNames ? (
+                <h3 className="text-sm font-semibold text-text">{carpool.route}</h3>
+                {routeNames && (
                   <RouteTimeline
                     origin={routeNames.origin}
                     destination={routeNames.destination || undefined}
                     distance={carpool.routeDistance}
                     duration={carpool.routeDuration}
+                    className="mt-1"
                   />
-                ) : (
-                  <h3 className="font-semibold text-text">
-                    {carpool.route === "Other" ? carpool.customRoute : carpool.route}
-                  </h3>
                 )}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   {carpool.daysOfWeek.map((d) => (
@@ -136,7 +133,7 @@ export default function MyCarpoolsList({
             <div className="mt-3 border-t border-border-light pt-3">
               <DriverTracking
                 carpoolId={carpool.id}
-                routeName={carpool.route === "Other" || carpool.route === "Custom" ? (carpool.customRoute || "Custom") : carpool.route}
+                routeName={carpool.route}
                 destinationLat={carpool.destinationLat}
                 destinationLng={carpool.destinationLng}
                 destinationName={carpool.destinationName}

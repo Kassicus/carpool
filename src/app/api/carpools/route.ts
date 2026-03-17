@@ -3,7 +3,6 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { carpools, users, driverBlocks, bookings } from "@/db/schema";
 import { eq, and, notInArray, sql } from "drizzle-orm";
-import { ROUTES } from "@/types";
 import { fetchDirections } from "@/lib/mapbox";
 
 // Returns { "2026-03-10": [...carpools], "2026-03-11": [...], ... }
@@ -171,32 +170,24 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const {
-      route, customRoute, daysOfWeek, time, totalSeats,
+      route, daysOfWeek, time, totalSeats,
       originLat, originLng, originName,
       destinationLat, destinationLng, destinationName,
+      routeGeometry: precomputedGeometry,
+      routeDistance: precomputedDistance,
+      routeDuration: precomputedDuration,
     } = body;
 
-    if (!route || !daysOfWeek?.length || !time || !totalSeats) {
+    if (!route?.trim() || !daysOfWeek?.length || !time || !totalSeats) {
       return NextResponse.json(
         { error: "All fields are required" },
         { status: 400 }
       );
     }
 
-    if (!ROUTES.includes(route)) {
-      return NextResponse.json({ error: "Invalid route" }, { status: 400 });
-    }
-
-    if (route === "Other" && !customRoute && !originName) {
+    if (!originLat || !originLng || !destinationLat || !destinationLng) {
       return NextResponse.json(
-        { error: "Custom route is required when selecting Other" },
-        { status: 400 }
-      );
-    }
-
-    if (route === "Custom" && (!originLat || !originLng || !destinationLat || !destinationLng)) {
-      return NextResponse.json(
-        { error: "Origin and destination locations are required for custom routes" },
+        { error: "Origin and destination locations are required" },
         { status: 400 }
       );
     }
@@ -218,12 +209,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch directions if we have coordinates
+    // Use pre-computed route data from client preview, or fetch server-side
     let routeGeometry: string | null = null;
     let routeDistance: number | null = null;
     let routeDuration: number | null = null;
 
-    if (originLat && originLng && destinationLat && destinationLng) {
+    if (precomputedGeometry && precomputedDistance != null && precomputedDuration != null) {
+      routeGeometry = precomputedGeometry;
+      routeDistance = precomputedDistance;
+      routeDuration = precomputedDuration;
+    } else if (originLat && originLng && destinationLat && destinationLng) {
       const directions = await fetchDirections(
         { lat: originLat, lng: originLng },
         { lat: destinationLat, lng: destinationLng }
@@ -239,8 +234,7 @@ export async function POST(request: Request) {
       .insert(carpools)
       .values({
         driverId: session.user.id,
-        route,
-        customRoute: (route === "Other" || route === "Custom") ? customRoute : null,
+        route: route.trim(),
         daysOfWeek,
         time,
         totalSeats,

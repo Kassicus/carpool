@@ -11,7 +11,6 @@ interface RideInfo {
   carpoolId: string;
   driverName: string;
   route: string;
-  customRoute: string | null;
   originName?: string | null;
   destinationName?: string | null;
   originLat?: number | null;
@@ -19,6 +18,8 @@ interface RideInfo {
   destinationLat?: number | null;
   destinationLng?: number | null;
   routeGeometry?: string | null;
+  routeDistance?: number | null;
+  routeDuration?: number | null;
   time: string;
 }
 
@@ -45,13 +46,7 @@ export default function RideDetailPage() {
     fetchRide();
   }, [carpoolId]);
 
-  const routeName = ride
-    ? ride.originName
-      ? `${ride.originName} → ${ride.destinationName || ""}`
-      : ride.route === "Other" || ride.route === "Custom"
-        ? ride.customRoute || "Custom Route"
-        : ride.route
-    : "";
+  const routeName = ride?.route || "";
 
   return (
     <div className="mx-auto max-w-2xl px-4">
@@ -67,7 +62,6 @@ export default function RideDetailPage() {
           <h1 className="text-xl font-bold text-text hidden sm:block">Live Tracking</h1>
           <RiderLiveMap
             carpoolId={carpoolId}
-            route={ride.route}
             originLat={ride.originLat}
             originLng={ride.originLng}
             destinationLat={ride.destinationLat}
@@ -78,6 +72,8 @@ export default function RideDetailPage() {
             name={ride.driverName}
             route={routeName}
             time={formatTime(ride.time)}
+            routeDistance={ride.routeDistance}
+            routeDuration={ride.routeDuration}
           />
         </div>
       ) : (

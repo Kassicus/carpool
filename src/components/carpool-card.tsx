@@ -13,9 +13,10 @@ interface Carpool {
   id: string;
   driverName: string;
   route: string;
-  customRoute: string | null;
   originName?: string | null;
   destinationName?: string | null;
+  routeDistance?: number | null;
+  routeDuration?: number | null;
   date: string;
   time: string;
   totalSeats: number;
@@ -44,15 +45,15 @@ export default function CarpoolCard({
         <div className="flex items-start gap-3 min-w-0">
           <Avatar name={carpool.driverName} size="sm" />
           <div className="min-w-0 flex-1">
-            {routeNames ? (
+            <h3 className="text-sm font-semibold text-text">{carpool.route}</h3>
+            {routeNames && (
               <RouteTimeline
                 origin={routeNames.origin}
                 destination={routeNames.destination || undefined}
+                distance={carpool.routeDistance}
+                duration={carpool.routeDuration}
+                className="mt-1"
               />
-            ) : (
-              <h3 className="font-semibold text-text">
-                {carpool.route === "Other" ? carpool.customRoute : carpool.route}
-              </h3>
             )}
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge variant="secondary">{carpool.driverName}</Badge>

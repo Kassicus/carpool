@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { DAY_LABELS } from "@/types";
-import { ROUTE_COORDS } from "@/lib/routes";
+import { fetchDirections } from "@/lib/mapbox";
+import { formatDuration, formatDistance } from "@/lib/map-style";
 import Button from "./ui/button";
 import Input from "./ui/input";
 import LocationPicker from "./location-picker";
+import RouteMap from "./map/route-map";
 
 interface LocationValue {
   lat: number;
@@ -13,12 +15,19 @@ interface LocationValue {
   name: string;
 }
 
-const PRESET_ROUTES = [
-  "To Seminary",
-  "To School from Seminary",
-  "To School",
-  "Home from School",
-] as const;
+interface SavedRoute {
+  id: string;
+  name: string;
+  originLat: number;
+  originLng: number;
+  originName: string;
+  destinationLat: number;
+  destinationLng: number;
+  destinationName: string;
+  routeGeometry: string | null;
+  routeDistance: number | null;
+  routeDuration: number | null;
+}
 
 export default function CreateCarpoolForm({
   onCreated,
@@ -27,27 +36,71 @@ export default function CreateCarpoolForm({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [route, setRoute] = useState("");
+  const [routeName, setRouteName] = useState("");
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [origin, setOrigin] = useState<LocationValue | null>(null);
   const [destination, setDestination] = useState<LocationValue | null>(null);
-  const [isCustomEditing, setIsCustomEditing] = useState(false);
+  const [routePreview, setRoutePreview] = useState<{
+    geometry: string;
+    distance: number;
+    duration: number;
+  } | null>(null);
+  const [savedRoutes, setSavedRoutes] = useState<SavedRoute[]>([]);
+  const [selectedSavedRouteId, setSelectedSavedRouteId] = useState<string | null>(null);
+  const [saveRoute, setSaveRoute] = useState(false);
+  const debouncePreviewRef = useRef<NodeJS.Timeout | null>(null);
 
-  function selectPreset(presetName: string) {
-    setRoute(presetName);
-    setIsCustomEditing(false);
-    const coords = ROUTE_COORDS[presetName];
-    if (coords) {
-      setOrigin(coords.origin);
-      setDestination(coords.destination);
+  const fetchSavedRoutes = useCallback(async () => {
+    try {
+      const res = await fetch("/api/saved-routes");
+      if (res.ok) {
+        const data = await res.json();
+        setSavedRoutes(data);
+      }
+    } catch {
+      // ignore
     }
+  }, []);
+
+  useEffect(() => {
+    fetchSavedRoutes();
+  }, [fetchSavedRoutes]);
+
+  useEffect(() => {
+    if (debouncePreviewRef.current) clearTimeout(debouncePreviewRef.current);
+    if (!origin || !destination) {
+      setRoutePreview(null);
+      return;
+    }
+    debouncePreviewRef.current = setTimeout(async () => {
+      const result = await fetchDirections(origin, destination);
+      if (result) {
+        setRoutePreview(result);
+      }
+    }, 500);
+    return () => {
+      if (debouncePreviewRef.current) clearTimeout(debouncePreviewRef.current);
+    };
+  }, [origin, destination]);
+
+  function selectSavedRoute(sr: SavedRoute) {
+    setSelectedSavedRouteId(sr.id);
+    setRouteName(sr.name);
+    setOrigin({ lat: sr.originLat, lng: sr.originLng, name: sr.originName });
+    setDestination({ lat: sr.destinationLat, lng: sr.destinationLng, name: sr.destinationName });
+    if (sr.routeGeometry && sr.routeDistance != null && sr.routeDuration != null) {
+      setRoutePreview({ geometry: sr.routeGeometry, distance: sr.routeDistance, duration: sr.routeDuration });
+    }
+    setSaveRoute(false);
   }
 
-  function selectCustom() {
-    setRoute("Custom");
-    setIsCustomEditing(true);
+  function selectNewRoute() {
+    setSelectedSavedRouteId(null);
+    setRouteName("");
     setOrigin(null);
     setDestination(null);
+    setRoutePreview(null);
+    setSaveRoute(false);
   }
 
   function toggleDay(day: number) {
@@ -56,12 +109,29 @@ export default function CreateCarpoolForm({
     );
   }
 
+  async function handleDeleteSavedRoute(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    if (!confirm("Delete this saved route?")) return;
+    const res = await fetch(`/api/saved-routes/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setSavedRoutes((prev) => prev.filter((r) => r.id !== id));
+      if (selectedSavedRouteId === id) {
+        selectNewRoute();
+      }
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
 
-    if (!route) {
-      setError("Select a route");
+    if (!routeName.trim()) {
+      setError("Enter a route name");
+      return;
+    }
+
+    if (!origin || !destination) {
+      setError("Set both origin and destination");
       return;
     }
 
@@ -70,29 +140,55 @@ export default function CreateCarpoolForm({
       return;
     }
 
-    if (route === "Custom" && (!origin || !destination)) {
-      setError("Set both origin and destination for custom routes");
-      return;
-    }
+    // Read form data synchronously before any async work
+    const formData = new FormData(e.currentTarget);
+    const time = formData.get("time") as string;
+    const totalSeats = Number(formData.get("totalSeats"));
 
     setLoading(true);
 
-    const formData = new FormData(e.currentTarget);
+    // Save route if requested
+    if (saveRoute && !selectedSavedRouteId) {
+      try {
+        await fetch("/api/saved-routes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: routeName.trim(),
+            originLat: origin.lat,
+            originLng: origin.lng,
+            originName: origin.name,
+            destinationLat: destination.lat,
+            destinationLng: destination.lng,
+            destinationName: destination.name,
+            routeGeometry: routePreview?.geometry,
+            routeDistance: routePreview?.distance,
+            routeDuration: routePreview?.duration,
+          }),
+        });
+        fetchSavedRoutes();
+      } catch {
+        // non-critical
+      }
+    }
 
     const res = await fetch("/api/carpools", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        route,
+        route: routeName.trim(),
         daysOfWeek: selectedDays,
-        time: formData.get("time"),
-        totalSeats: Number(formData.get("totalSeats")),
-        originLat: origin?.lat,
-        originLng: origin?.lng,
-        originName: origin?.name,
-        destinationLat: destination?.lat,
-        destinationLng: destination?.lng,
-        destinationName: destination?.name,
+        time,
+        totalSeats,
+        originLat: origin.lat,
+        originLng: origin.lng,
+        originName: origin.name,
+        destinationLat: destination.lat,
+        destinationLng: destination.lng,
+        destinationName: destination.name,
+        routeGeometry: routePreview?.geometry,
+        routeDistance: routePreview?.distance,
+        routeDuration: routePreview?.duration,
       }),
     });
 
@@ -103,16 +199,19 @@ export default function CreateCarpoolForm({
       setError(data.error || "Failed to create carpool");
     } else {
       (e.target as HTMLFormElement).reset();
-      setRoute("");
+      setRouteName("");
       setSelectedDays([]);
       setOrigin(null);
       setDestination(null);
-      setIsCustomEditing(false);
+      setRoutePreview(null);
+      setSelectedSavedRouteId(null);
+      setSaveRoute(false);
       onCreated();
     }
   }
 
-  const isPreset = PRESET_ROUTES.includes(route as typeof PRESET_ROUTES[number]);
+  const isUsingSavedRoute = selectedSavedRouteId !== null;
+  const showForm = isUsingSavedRoute || routeName !== "" || origin !== null;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
@@ -120,69 +219,107 @@ export default function CreateCarpoolForm({
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">{error}</p>
       )}
 
-      {/* Route preset chips */}
+      {/* Route selection */}
       <div>
         <label className="mb-2 block text-sm font-medium text-text-secondary">
           Route
         </label>
         <div className="flex flex-wrap gap-2">
-          {PRESET_ROUTES.map((r) => (
+          {savedRoutes.map((sr) => (
             <button
-              key={r}
+              key={sr.id}
               type="button"
-              onClick={() => selectPreset(r)}
-              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                route === r
+              onClick={() => selectSavedRoute(sr)}
+              className={`group relative rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                selectedSavedRouteId === sr.id
                   ? "bg-primary text-white shadow-sm"
                   : "border border-border text-text-secondary hover:bg-primary-50 hover:text-primary"
               }`}
             >
-              {r}
+              {sr.name}
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => handleDeleteSavedRoute(e, sr.id)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleDeleteSavedRoute(e as unknown as React.MouseEvent, sr.id); }}
+                className={`ml-1.5 inline-flex items-center opacity-0 group-hover:opacity-100 transition-opacity ${
+                  selectedSavedRouteId === sr.id ? "text-white/70 hover:text-white" : "text-text-muted hover:text-red-500"
+                }`}
+              >
+                &times;
+              </span>
             </button>
           ))}
           <button
             type="button"
-            onClick={selectCustom}
+            onClick={selectNewRoute}
             className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-              route === "Custom"
+              !isUsingSavedRoute && showForm
                 ? "bg-primary text-white shadow-sm"
                 : "border border-border text-text-secondary hover:bg-primary-50 hover:text-primary"
             }`}
           >
-            Custom
+            + New Route
           </button>
         </div>
       </div>
 
-      {/* Location pickers */}
-      {route && (
+      {/* Route name + locations */}
+      {(isUsingSavedRoute || !isUsingSavedRoute) && (
         <div className="space-y-4">
-          {isPreset && !isCustomEditing && (
-            <button
-              type="button"
-              onClick={() => {
-                setRoute("Custom");
-                setIsCustomEditing(true);
-              }}
-              className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-            >
-              Edit locations
-            </button>
-          )}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+              Route Name
+            </label>
+            <Input
+              type="text"
+              value={routeName}
+              onChange={(e) => setRouteName(e.target.value)}
+              placeholder="e.g. Morning Commute"
+              readOnly={isUsingSavedRoute}
+              className={isUsingSavedRoute ? "bg-gray-50" : ""}
+            />
+          </div>
           <LocationPicker
             label="Origin"
             value={origin}
             onChange={setOrigin}
             placeholder="Search for pickup location..."
-            readOnly={isPreset && !isCustomEditing}
+            readOnly={isUsingSavedRoute}
           />
           <LocationPicker
             label="Destination"
             value={destination}
             onChange={setDestination}
             placeholder="Search for drop-off location..."
-            readOnly={isPreset && !isCustomEditing}
+            readOnly={isUsingSavedRoute}
           />
+          {origin && destination && (
+            <div>
+              <RouteMap
+                origin={origin}
+                destination={destination}
+                routeGeometry={routePreview?.geometry}
+                className="h-48"
+              />
+              {routePreview && (
+                <p className="text-xs text-text-muted text-center mt-2">
+                  {formatDistance(routePreview.distance)} &middot; {formatDuration(routePreview.duration)}
+                </p>
+              )}
+            </div>
+          )}
+          {!isUsingSavedRoute && origin && destination && routeName.trim() && (
+            <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+              <input
+                type="checkbox"
+                checked={saveRoute}
+                onChange={(e) => setSaveRoute(e.target.checked)}
+                className="rounded border-border text-primary focus:ring-primary"
+              />
+              Save this route for future use
+            </label>
+          )}
         </div>
       )}
 

@@ -8,7 +8,6 @@ import Badge from "./ui/badge";
 interface ActiveRide {
   carpoolId: string;
   route: string;
-  customRoute: string | null;
   originName?: string | null;
   destinationName?: string | null;
   driverName: string;
@@ -37,7 +36,6 @@ export default function ActiveRideBanner() {
               setActiveRide({
                 carpoolId: ride.carpoolId,
                 route: ride.route,
-                customRoute: ride.customRoute,
                 originName: ride.originName,
                 destinationName: ride.destinationName,
                 driverName: ride.driverName,
@@ -63,11 +61,7 @@ export default function ActiveRideBanner() {
 
   if (!activeRide) return null;
 
-  const routeName = activeRide.originName
-    ? `${activeRide.originName} → ${activeRide.destinationName || ""}`
-    : activeRide.route === "Other" || activeRide.route === "Custom"
-      ? activeRide.customRoute
-      : activeRide.route;
+  const routeName = activeRide.route;
 
   return (
     <Link href={`/rider/ride/${activeRide.carpoolId}`}>
