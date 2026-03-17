@@ -11,8 +11,9 @@ import { PageHeaderProvider } from "./page-header-context";
 
 const navLinks = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/rider", label: "Find Ride" },
+  { href: "/my-rides", label: "My Rides" },
   { href: "/driver", label: "Driver" },
-  { href: "/rider", label: "Rider" },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {

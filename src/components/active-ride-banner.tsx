@@ -20,35 +20,10 @@ export default function ActiveRideBanner() {
   useEffect(() => {
     async function check() {
       try {
-        const res = await fetch("/api/my-rides");
+        const res = await fetch("/api/tracking/active");
         if (!res.ok) return;
-        const rides = await res.json();
-        if (!Array.isArray(rides) || rides.length === 0) return;
-
-        // Check each ride's carpool for active status
-        for (const ride of rides) {
-          try {
-            const trackRes = await fetch(`/api/tracking/${ride.carpoolId}/stream`, {
-              method: "GET",
-              headers: { Accept: "text/event-stream" },
-            });
-            if (trackRes.ok) {
-              setActiveRide({
-                carpoolId: ride.carpoolId,
-                route: ride.route,
-                originName: ride.originName,
-                destinationName: ride.destinationName,
-                driverName: ride.driverName,
-                time: ride.time,
-              });
-              trackRes.body?.cancel();
-              break;
-            }
-            trackRes.body?.cancel();
-          } catch {
-            // not active
-          }
-        }
+        const data = await res.json();
+        setActiveRide(data || null);
       } catch {
         // ignore
       }
@@ -60,8 +35,6 @@ export default function ActiveRideBanner() {
   }, []);
 
   if (!activeRide) return null;
-
-  const routeName = activeRide.route;
 
   return (
     <Link href={`/rider/ride/${activeRide.carpoolId}`}>
@@ -76,7 +49,7 @@ export default function ActiveRideBanner() {
               Your driver is on the way!
             </p>
             <p className="text-xs text-text-secondary truncate">
-              {routeName} &middot; {activeRide.driverName}
+              {activeRide.route} &middot; {activeRide.driverName}
             </p>
           </div>
           <Badge variant="primary">Track</Badge>

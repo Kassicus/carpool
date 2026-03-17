@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { bookings, carpools, driverBlocks } from "@/db/schema";
+import { bookings, carpools, driverBlocks, rideInstances } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -40,6 +40,32 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Carpool no longer available" },
         { status: 404 }
+      );
+    }
+
+    // Check if ride is in progress or completed for this date
+    const [instance] = await db
+      .select({ status: rideInstances.status })
+      .from(rideInstances)
+      .where(
+        and(
+          eq(rideInstances.carpoolId, carpoolId),
+          eq(rideInstances.date, date)
+        )
+      )
+      .limit(1);
+
+    if (instance?.status === "in_progress") {
+      return NextResponse.json(
+        { error: "This ride is already in progress" },
+        { status: 409 }
+      );
+    }
+
+    if (instance?.status === "completed") {
+      return NextResponse.json(
+        { error: "This ride has already been completed" },
+        { status: 409 }
       );
     }
 

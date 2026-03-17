@@ -49,7 +49,15 @@ export default function CreateCarpoolForm({
   const [selectedSavedRouteId, setSelectedSavedRouteId] = useState<string | null>(null);
   const [saveRoute, setSaveRoute] = useState(false);
   const [gasMoneyRequested, setGasMoneyRequested] = useState(false);
+  const [includeReturn, setIncludeReturn] = useState(false);
+  const [returnTime, setReturnTime] = useState("");
+  const [returnPreview, setReturnPreview] = useState<{
+    geometry: string;
+    distance: number;
+    duration: number;
+  } | null>(null);
   const debouncePreviewRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceReturnRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchSavedRoutes = useCallback(async () => {
     try {
@@ -84,6 +92,22 @@ export default function CreateCarpoolForm({
     };
   }, [origin, destination]);
 
+  // Fetch return route preview
+  useEffect(() => {
+    if (debounceReturnRef.current) clearTimeout(debounceReturnRef.current);
+    if (!includeReturn || !origin || !destination) {
+      setReturnPreview(null);
+      return;
+    }
+    debounceReturnRef.current = setTimeout(async () => {
+      const result = await fetchDirections(destination, origin);
+      if (result) setReturnPreview(result);
+    }, 500);
+    return () => {
+      if (debounceReturnRef.current) clearTimeout(debounceReturnRef.current);
+    };
+  }, [includeReturn, origin, destination]);
+
   function selectSavedRoute(sr: SavedRoute) {
     setSelectedSavedRouteId(sr.id);
     setRouteName(sr.name);
@@ -102,6 +126,9 @@ export default function CreateCarpoolForm({
     setDestination(null);
     setRoutePreview(null);
     setSaveRoute(false);
+    setIncludeReturn(false);
+    setReturnTime("");
+    setReturnPreview(null);
   }
 
   function toggleDay(day: number) {
@@ -138,6 +165,11 @@ export default function CreateCarpoolForm({
 
     if (selectedDays.length === 0) {
       setError("Select at least one day");
+      return;
+    }
+
+    if (includeReturn && !returnTime) {
+      setError("Set a return time");
       return;
     }
 
@@ -195,22 +227,61 @@ export default function CreateCarpoolForm({
     });
 
     const data = await res.json();
-    setLoading(false);
 
     if (!res.ok) {
+      setLoading(false);
       setError(data.error || "Failed to create carpool");
-    } else {
-      (e.target as HTMLFormElement).reset();
-      setRouteName("");
-      setSelectedDays([]);
-      setOrigin(null);
-      setDestination(null);
-      setRoutePreview(null);
-      setSelectedSavedRouteId(null);
-      setSaveRoute(false);
-      setGasMoneyRequested(false);
-      onCreated();
+      return;
     }
+
+    // Create return trip if requested, and link them together
+    if (includeReturn && returnTime && origin && destination) {
+      const returnRes = await fetch("/api/carpools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          route: `${routeName.trim()} (Return)`,
+          daysOfWeek: selectedDays,
+          time: returnTime,
+          totalSeats,
+          originLat: destination.lat,
+          originLng: destination.lng,
+          originName: destination.name,
+          destinationLat: origin.lat,
+          destinationLng: origin.lng,
+          destinationName: origin.name,
+          routeGeometry: returnPreview?.geometry,
+          routeDistance: returnPreview?.distance,
+          routeDuration: returnPreview?.duration,
+          gasMoneyRequested,
+          returnCarpoolId: data.id,
+        }),
+      });
+      const returnData = await returnRes.json();
+      if (returnRes.ok && returnData.id) {
+        // Link outbound → return
+        await fetch(`/api/carpools/${data.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ returnCarpoolId: returnData.id }),
+        });
+      }
+    }
+
+    setLoading(false);
+    (e.target as HTMLFormElement).reset();
+    setRouteName("");
+    setSelectedDays([]);
+    setOrigin(null);
+    setDestination(null);
+    setRoutePreview(null);
+    setSelectedSavedRouteId(null);
+    setSaveRoute(false);
+    setGasMoneyRequested(false);
+    setIncludeReturn(false);
+    setReturnTime("");
+    setReturnPreview(null);
+    onCreated();
   }
 
   const isUsingSavedRoute = selectedSavedRouteId !== null;
@@ -325,6 +396,49 @@ export default function CreateCarpoolForm({
               <p className="text-xs text-text-muted text-center mt-2">
                 {formatDistance(routePreview.distance)} &middot; {formatDuration(routePreview.duration)}
               </p>
+            )}
+          </div>
+        )}
+        {origin && destination && (
+          <div className="rounded-xl border border-border p-4 space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeReturn}
+                onChange={(e) => setIncludeReturn(e.target.checked)}
+                className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+              />
+              <div>
+                <span className="text-sm font-medium text-text">Include return trip</span>
+                <p className="text-xs text-text-muted">
+                  Creates a second carpool from {destination.name.split(",")[0]} back to {origin.name.split(",")[0]}
+                </p>
+              </div>
+            </label>
+            {includeReturn && (
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+                    Return Time
+                  </label>
+                  <Input
+                    type="time"
+                    value={returnTime}
+                    onChange={(e) => setReturnTime(e.target.value)}
+                    required={includeReturn}
+                  />
+                </div>
+                {returnPreview && (
+                  <div className="flex items-center gap-2 text-xs text-text-muted">
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                    </svg>
+                    <span>
+                      {destination.name.split(",")[0]} &rarr; {origin.name.split(",")[0]} &middot; {formatDistance(returnPreview.distance)} &middot; {formatDuration(returnPreview.duration)}
+                    </span>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}

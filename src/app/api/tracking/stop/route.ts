@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { carpools, driverLocations } from "@/db/schema";
+import { carpools, driverLocations, rideInstances } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -36,6 +36,18 @@ export async function POST(request: Request) {
     await db
       .delete(driverLocations)
       .where(eq(driverLocations.carpoolId, carpoolId));
+
+    // Mark ride instance as completed
+    const today = new Date().toISOString().split("T")[0];
+    await db
+      .update(rideInstances)
+      .set({ status: "completed", completedAt: new Date() })
+      .where(
+        and(
+          eq(rideInstances.carpoolId, carpoolId),
+          eq(rideInstances.date, today)
+        )
+      );
 
     return NextResponse.json({ ok: true });
   } catch {

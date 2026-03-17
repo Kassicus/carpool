@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { carpools } from "@/db/schema";
+import { carpools, rideInstances } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 
 export async function POST(request: Request) {
@@ -31,6 +31,16 @@ export async function POST(request: Request) {
       .update(carpools)
       .set({ isActive: true })
       .where(eq(carpools.id, carpoolId));
+
+    // Create or update ride instance for today
+    const today = new Date().toISOString().split("T")[0];
+    await db
+      .insert(rideInstances)
+      .values({ carpoolId, date: today, status: "in_progress" })
+      .onConflictDoUpdate({
+        target: [rideInstances.carpoolId, rideInstances.date],
+        set: { status: "in_progress", startedAt: new Date() },
+      });
 
     return NextResponse.json({ ok: true });
   } catch {

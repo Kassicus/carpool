@@ -31,6 +31,16 @@ interface CarpoolData {
   routeDistance?: number | null;
   routeDuration?: number | null;
   gasMoneyRequested?: boolean;
+  returnCarpoolId?: string | null;
+  rideStatus?: string | null;
+  riders?: { name: string; avatarUrl: string | null }[];
+  returnTrip?: {
+    id: string;
+    route: string;
+    time: string;
+    originName: string | null;
+    destinationName: string | null;
+  } | null;
 }
 
 interface DriverProfile {
@@ -55,12 +65,13 @@ export default function CarpoolDetailPage() {
   const [driver, setDriver] = useState<DriverProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(false);
+  const [bookReturn, setBookReturn] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const carpoolRes = await fetch(`/api/carpools/${carpoolId}`);
+        const carpoolRes = await fetch(`/api/carpools/${carpoolId}${date ? `?date=${date}` : ""}`);
         if (!carpoolRes.ok) {
           setError("Carpool not found");
           setLoading(false);
@@ -96,6 +107,15 @@ export default function CarpoolDetailPage() {
         alert(data.error || "Failed to book seat");
         setBooking(false);
         return;
+      }
+
+      // Book return trip too if selected
+      if (bookReturn && carpool?.returnTrip && date) {
+        await fetch("/api/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ carpoolId: carpool.returnTrip.id, date }),
+        });
       }
 
       router.push("/rider");
@@ -221,6 +241,27 @@ export default function CarpoolDetailPage() {
             </div>
           </Card>
 
+          {/* Riders */}
+          {carpool.riders && carpool.riders.length > 0 && (
+            <Card className="p-4">
+              <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide mb-3">
+                Riders ({carpool.riders.length})
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {carpool.riders.map((rider, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <Avatar
+                      name={rider.name}
+                      imageUrl={rider.avatarUrl}
+                      size="sm"
+                    />
+                    <span className="text-sm text-text">{rider.name}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           {/* Gas Money Notice */}
           {carpool.gasMoneyRequested && (
             <Card className="p-4 bg-primary-50 border-primary/20">
@@ -248,15 +289,59 @@ export default function CarpoolDetailPage() {
             </Card>
           )}
 
+          {/* Return Trip */}
+          {carpool.returnTrip && (
+            <Card className="p-4 border-primary/20">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={bookReturn}
+                  onChange={(e) => setBookReturn(e.target.checked)}
+                  className="rounded border-border text-primary focus:ring-primary h-4 w-4 mt-0.5"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-text">
+                    Return trip included
+                  </p>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-text-secondary">
+                    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                    </svg>
+                    <span>
+                      {carpool.returnTrip.originName?.split(",")[0]} &rarr; {carpool.returnTrip.destinationName?.split(",")[0]} at {formatTime(carpool.returnTrip.time)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-muted mt-1">
+                    {bookReturn ? "Both trips will be booked" : "Only the outbound trip will be booked"}
+                  </p>
+                </div>
+              </label>
+            </Card>
+          )}
+
           {/* Book Button */}
-          <Button
-            size="lg"
-            className="w-full"
-            onClick={handleBook}
-            disabled={booking}
-          >
-            {booking ? "Booking..." : "Book This Ride"}
-          </Button>
+          {carpool.rideStatus === "completed" ? (
+            <div className="rounded-2xl bg-gray-100 p-4 text-center">
+              <p className="text-sm font-medium text-text-secondary">This ride has been completed</p>
+            </div>
+          ) : carpool.rideStatus === "in_progress" ? (
+            <div className="rounded-2xl bg-blue-50 p-4 text-center">
+              <p className="text-sm font-medium text-blue-700">This ride is currently in progress</p>
+            </div>
+          ) : (
+            <Button
+              size="lg"
+              className="w-full"
+              onClick={handleBook}
+              disabled={booking}
+            >
+              {booking
+                ? "Booking..."
+                : carpool.returnTrip && bookReturn
+                  ? "Book Round Trip"
+                  : "Book This Ride"}
+            </Button>
+          )}
         </div>
       )}
     </div>

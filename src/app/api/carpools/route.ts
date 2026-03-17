@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { carpools, users, driverBlocks, bookings } from "@/db/schema";
+import { carpools, users, driverBlocks, bookings, rideInstances } from "@/db/schema";
 import { eq, and, notInArray, sql } from "drizzle-orm";
 import { fetchDirections } from "@/lib/mapbox";
 
@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       id: carpools.id,
       driverId: carpools.driverId,
       driverName: users.fullName,
+      driverAvatarUrl: users.avatarUrl,
       route: carpools.route,
       customRoute: carpools.customRoute,
       daysOfWeek: carpools.daysOfWeek,
@@ -61,6 +62,7 @@ export async function GET(request: Request) {
       routeDistance: carpools.routeDistance,
       routeDuration: carpools.routeDuration,
       gasMoneyRequested: carpools.gasMoneyRequested,
+      returnCarpoolId: carpools.returnCarpoolId,
     })
     .from(carpools)
     .innerJoin(users, eq(carpools.driverId, users.id))
@@ -105,12 +107,42 @@ export async function GET(request: Request) {
     countMap.set(`${bc.carpoolId}:${bc.date}`, bc.count);
   }
 
+  // Fetch ride instance statuses for the week
+  let rideStatuses: { carpoolId: string; date: string; status: string }[] = [];
+  if (carpoolIds.length > 0) {
+    rideStatuses = await db
+      .select({
+        carpoolId: rideInstances.carpoolId,
+        date: rideInstances.date,
+        status: rideInstances.status,
+      })
+      .from(rideInstances)
+      .where(
+        and(
+          sql`${rideInstances.carpoolId} IN (${sql.join(
+            carpoolIds.map((id) => sql`${id}`),
+            sql`, `
+          )})`,
+          sql`${rideInstances.date} IN (${sql.join(
+            dateStrings.map((d) => sql`${d}`),
+            sql`, `
+          )})`
+        )
+      );
+  }
+
+  const statusMap = new Map<string, string>();
+  for (const rs of rideStatuses) {
+    statusMap.set(`${rs.carpoolId}:${rs.date}`, rs.status);
+  }
+
   // Build the weekly response
   const week: Record<
     string,
     {
       id: string;
       driverName: string;
+      driverAvatarUrl: string | null;
       route: string;
       customRoute: string | null;
       originName: string | null;
@@ -123,6 +155,8 @@ export async function GET(request: Request) {
       routeDistance: number | null;
       routeDuration: number | null;
       gasMoneyRequested: boolean;
+      returnCarpoolId: string | null;
+      rideStatus: string | null;
       time: string;
       totalSeats: number;
       availableSeats: number;
@@ -138,6 +172,7 @@ export async function GET(request: Request) {
         return {
           id: c.id,
           driverName: c.driverName,
+          driverAvatarUrl: c.driverAvatarUrl,
           route: c.route,
           customRoute: c.customRoute,
           originName: c.originName,
@@ -150,13 +185,15 @@ export async function GET(request: Request) {
           routeDistance: c.routeDistance,
           routeDuration: c.routeDuration,
           gasMoneyRequested: c.gasMoneyRequested,
+          returnCarpoolId: c.returnCarpoolId,
+          rideStatus: statusMap.get(`${c.id}:${day.date}`) || null,
           time: c.time,
           totalSeats: c.totalSeats,
           availableSeats: c.totalSeats - booked,
           date: day.date,
         };
       })
-      .filter((c) => c.availableSeats > 0);
+      .filter((c) => c.availableSeats > 0 && c.rideStatus !== "completed");
 
     week[day.date] = dayCarpools;
   }
@@ -180,6 +217,7 @@ export async function POST(request: Request) {
       routeDistance: precomputedDistance,
       routeDuration: precomputedDuration,
       gasMoneyRequested: gasMoneyBody,
+      returnCarpoolId: returnCarpoolIdBody,
     } = body;
 
     if (!route?.trim() || !daysOfWeek?.length || !time || !totalSeats) {
@@ -252,6 +290,7 @@ export async function POST(request: Request) {
         routeDistance,
         routeDuration,
         gasMoneyRequested: gasMoneyBody === true,
+        returnCarpoolId: returnCarpoolIdBody || null,
       })
       .returning();
 

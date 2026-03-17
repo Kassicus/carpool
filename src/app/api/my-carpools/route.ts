@@ -29,6 +29,8 @@ export async function GET() {
       routeDistance: carpools.routeDistance,
       routeDuration: carpools.routeDuration,
       gasMoneyRequested: carpools.gasMoneyRequested,
+      returnCarpoolId: carpools.returnCarpoolId,
+      isActive: carpools.isActive,
     })
     .from(carpools)
     .where(eq(carpools.driverId, session.user.id))
@@ -44,6 +46,7 @@ export async function GET() {
           bookingId: bookings.id,
           riderId: bookings.riderUserId,
           riderName: users.fullName,
+          riderAvatarUrl: users.avatarUrl,
           date: bookings.date,
           bookedAt: bookings.createdAt,
         })

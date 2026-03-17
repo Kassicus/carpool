@@ -35,6 +35,7 @@ export const carpools = pgTable("carpools", {
   routeDistance: integer("route_distance"),
   routeDuration: integer("route_duration"),
   gasMoneyRequested: boolean("gas_money_requested").default(false).notNull(),
+  returnCarpoolId: uuid("return_carpool_id"),
   isActive: boolean("is_active").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -95,6 +96,23 @@ export const savedRoutes = pgTable("saved_routes", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const rideInstances = pgTable(
+  "ride_instances",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    carpoolId: uuid("carpool_id")
+      .notNull()
+      .references(() => carpools.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("in_progress"), // in_progress | completed
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [
+    uniqueIndex("ride_instance_carpool_date_idx").on(table.carpoolId, table.date),
+  ]
+);
+
 export const driverBlocks = pgTable(
   "driver_blocks",
   {
@@ -134,6 +152,14 @@ export const carpoolsRelations = relations(carpools, ({ one, many }) => ({
     references: [users.id],
   }),
   bookings: many(bookings),
+  rideInstances: many(rideInstances),
+}));
+
+export const rideInstancesRelations = relations(rideInstances, ({ one }) => ({
+  carpool: one(carpools, {
+    fields: [rideInstances.carpoolId],
+    references: [carpools.id],
+  }),
 }));
 
 export const bookingsRelations = relations(bookings, ({ one }) => ({

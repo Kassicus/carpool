@@ -13,6 +13,7 @@ interface DriverTrackingProps {
   originLat?: number | null;
   originLng?: number | null;
   routeGeometry?: string | null;
+  isActive?: boolean;
 }
 
 export default function DriverTracking({
@@ -24,13 +25,45 @@ export default function DriverTracking({
   originLat,
   originLng,
   routeGeometry,
+  isActive: isActiveProp = false,
 }: DriverTrackingProps) {
-  const [active, setActive] = useState(false);
+  const [active, setActive] = useState(isActiveProp);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
   const watchIdRef = useRef<number | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Resume geolocation watching if the trip was already active on mount
+  useEffect(() => {
+    if (!isActiveProp || !navigator.geolocation) return;
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => sendLocation(pos),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+
+    intervalRef.current = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => sendLocation(pos),
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 5000 }
+      );
+    }, 5000);
+
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActiveProp]);
 
   const sendLocation = useCallback(
     async (position: GeolocationPosition) => {
